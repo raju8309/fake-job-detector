@@ -5,59 +5,61 @@ import re
 import requests
 from rapidfuzz import fuzz
 
-# Basic HTTP header so sites don’t block us
-UA = {"User-Agent": "Mozilla/5.0 (FakeJobVerifier/1.0)"}
+# Standard browser header to avoid being blocked
+HEADERS = {"User-Agent": "Mozilla/5.0 (FakeJobVerifier/1.0)"}
 
-# Adzuna API keys (read from env; fall back to defaults for local dev)
-ADZUNA_APP_ID  = os.getenv("ADZUNA_APP_ID", "d0dac5ab")
+# Adzuna API credentials - pull from environment variables
+ADZUNA_APP_ID = os.getenv("ADZUNA_APP_ID", "d0dac5ab")
 ADZUNA_APP_KEY = os.getenv("ADZUNA_APP_KEY", "8ad5b4c10f639bd4dda3e5d4649cd9b1")
 
 
-# ------------ small helpers ------------
-
-def _n(s: str) -> str:
-    """Normalize text: lowercase + collapse spaces."""
-    return re.sub(r"\s+", " ", (s or "").strip().lower())
-
-
-def _sim(a: str, b: str) -> int:
-    """Fuzzy similarity between two strings."""
-    return fuzz.token_set_ratio(_n(a), _n(b))
+def normalize_text(text):
+    """Clean up text by converting to lowercase and removing extra whitespace"""
+    if not text:
+        return ""
+    cleaned = text.strip().lower()
+    return re.sub(r"\s+", " ", cleaned)
 
 
-def _guess_company(title: str, description: str, provided: str = "") -> str:
-    """Try to guess company name from email/domain if user didn’t type it."""
-    if provided:
-        return provided.strip()
-
-    # look for something like hr@company.com
-    m = re.search(r"[A-Za-z0-9._%+-]+@([A-Za-z0-9.-]+)\.[A-Za-z]{2,}", description or "")
-    if m:
-        dom = m.group(1).lower()
-        return re.split(r"[.\-]", dom)[0]
-
-    # simple fallback: first capitalized word in description
-    m = re.search(r"\b([A-Z][a-zA-Z]+)\b", description or "")
-    return m.group(1) if m else ""
+def calculate_similarity(text1, text2):
+    """Compare two strings and return a similarity score (0-100)"""
+    normalized1 = normalize_text(text1)
+    normalized2 = normalize_text(text2)
+    return fuzz.token_set_ratio(normalized1, normalized2)
 
 
-# ------------ Adzuna search ------------
-
-def adzuna_search(
-    title: str,
-    company: str = "",
-    where: str = "",
-    country: str = "us",
-    pages: int = 2,
-) -> dict:
+def extract_company_name(job_title, job_description, company_input=""):
     """
-    Look up similar jobs on Adzuna and return:
-    {
-        "found": bool,
-        "matches": int,
-        "sample": {"title", "company", "url", "source"} | None,
-        "note": optional reason string
-    }
+    Try to figure out the company name if the user didn't provide one.
+    First checks if they already gave us a company name.
+    Then looks for email addresses and extracts the domain.
+    Falls back to finding the first capitalized word.
+    """
+    if company_input:
+        return company_input.strip()
+
+    # Look for email addresses like hr@company.com
+    email_pattern = r"[A-Za-z0-9._%+-]+@([A-Za-z0-9.-]+)\.[A-Za-z]{2,}"
+    email_match = re.search(email_pattern, job_description or "")
+    
+    if email_match:
+        domain = email_match.group(1).lower()
+        # Get the first part of the domain (before any dots or hyphens)
+        company_parts = re.split(r"[.\-]", domain)
+        return company_parts[0]
+
+    # Last resort: find first capitalized word in the description
+    capitalized_word = re.search(r"\b([A-Z][a-zA-Z]+)\b", job_description or "")
+    if capitalized_word:
+        return capitalized_word.group(1)
+    
+    return ""
+
+
+def search_adzuna_jobs(job_title, company_name="", location="", country="us", num_pages=2):
+    """
+    Search Adzuna's job database to see if similar jobs exist.
+    Returns a dictionary with info about whether we found matching jobs.
     """
     if not ADZUNA_APP_ID or not ADZUNA_APP_KEY:
         return {
@@ -67,53 +69,70 @@ def adzuna_search(
             "note": "missing adzuna keys",
         }
 
-    t_norm = _n(title)
-    c_norm = _n(company)
-    matches = 0
-    best = None
+    normalized_title = normalize_text(job_title)
+    normalized_company = normalize_text(company_name)
+    total_matches = 0
+    best_match = None
 
-    for page in range(1, pages + 1):
-        url = f"https://api.adzuna.com/v1/api/jobs/{country}/search/{page}"
-        params = {
+    # Search through multiple pages of results
+    for page_num in range(1, num_pages + 1):
+        api_url = f"https://api.adzuna.com/v1/api/jobs/{country}/search/{page_num}"
+        
+        query_params = {
             "app_id": ADZUNA_APP_ID,
             "app_key": ADZUNA_APP_KEY,
-            "what": title,
-            "where": where or "",
+            "what": job_title,
+            "where": location or "",
             "results_per_page": 50,
             "content-type": "application/json",
         }
 
         try:
-            r = requests.get(url, params=params, headers=UA, timeout=8)
-            r.raise_for_status()
-            data = r.json()
+            response = requests.get(api_url, params=query_params, headers=HEADERS, timeout=8)
+            response.raise_for_status()
+            job_data = response.json()
         except Exception:
-            # on error, just skip this page
+            # If the request fails, just skip to the next page
             continue
 
-        for j in data.get("results", []):
-            jt = _n(j.get("title"))
-            jc = _n((j.get("company") or {}).get("display_name"))
+        # Check each job posting for matches
+        for job in job_data.get("results", []):
+            job_title_from_api = normalize_text(job.get("title"))
+            
+            company_info = job.get("company") or {}
+            job_company_from_api = normalize_text(company_info.get("display_name"))
 
-            st = _sim(t_norm, jt)
-            sc = _sim(c_norm, jc) if c_norm else 100
+            # Calculate how similar the titles are
+            title_similarity = calculate_similarity(normalized_title, job_title_from_api)
+            
+            # Only check company similarity if we have a company name to compare
+            if normalized_company:
+                company_similarity = calculate_similarity(normalized_company, job_company_from_api)
+            else:
+                company_similarity = 100  # Don't penalize if no company provided
 
-            if st >= 75 and sc >= 70:
-                matches += 1
-                if not best:
-                    best = {
-                        "title": j.get("title"),
-                        "company": (j.get("company") or {}).get("display_name"),
-                        "url": j.get("redirect_url"),
+            # Count as a match if both title and company are similar enough
+            if title_similarity >= 75 and company_similarity >= 70:
+                total_matches += 1
+                
+                # Save the first good match as an example
+                if not best_match:
+                    best_match = {
+                        "title": job.get("title"),
+                        "company": company_info.get("display_name"),
+                        "url": job.get("redirect_url"),
                         "source": "adzuna",
                     }
 
-    return {"found": matches > 0, "matches": matches, "sample": best}
+    return {
+        "found": total_matches > 0,
+        "matches": total_matches,
+        "sample": best_match
+    }
 
 
-# ------------ emails + keywords ------------
-
-FREE_EMAILS = {
+# Common free email providers that legitimate companies usually don't use
+FREE_EMAIL_PROVIDERS = {
     "gmail.com",
     "yahoo.com",
     "outlook.com",
@@ -127,14 +146,16 @@ FREE_EMAILS = {
     "mail.com",
 }
 
-DISPOSABLE_HINTS = {
+# Patterns often found in disposable email addresses
+DISPOSABLE_EMAIL_PATTERNS = {
     "tempmail",
     "10minutemail",
     "mailinator",
     "guerrillamail",
 }
 
-SCAM_KEYWORDS = [
+# Red flag phrases commonly found in job scams
+SUSPICIOUS_PHRASES = [
     "no interview",
     "quick money",
     "wire transfer",
@@ -153,103 +174,150 @@ SCAM_KEYWORDS = [
 ]
 
 
-def extract_emails(text: str) -> list[str]:
-    return re.findall(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", text or "")
+def find_email_addresses(text):
+    """Pull out all email addresses from a block of text"""
+    email_pattern = r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"
+    return re.findall(email_pattern, text or "")
 
 
-def check_email_domain(email: str, claimed_company: str | None = None) -> dict:
-    user, domain = email.split("@", 1)
-    d = domain.lower()
-    signals = []
-
-    if d in FREE_EMAILS:
-        signals.append("free_domain")
-
-    if any(h in d for h in DISPOSABLE_HINTS):
-        signals.append("disposable_like")
-
-    if claimed_company:
-        ck = re.sub(r"[^a-z0-9]", "", (claimed_company or "").lower())
-        dk = re.sub(r"[^a-z0-9]", "", d.split(".")[0])
-        if ck and ck not in dk:
-            signals.append("company_domain_mismatch")
-
-    return {"email": email, "domain": d, "signals": signals}
-
-
-def detect_keywords(text: str) -> list[str]:
-    t = _n(text)
-    return [kw for kw in SCAM_KEYWORDS if kw in t]
-
-
-# ------------ scoring / final outputs ------------
-
-def compute_confidence(
-    model_fake_prob: float,
-    api_found: bool,
-    email_checks: list[dict],
-    kw_hits: list[str],
-) -> dict:
+def analyze_email_domain(email_address, company_name=None):
     """
-    Combine model score + Adzuna + emails + keywords
-    into final real/fake percentages.
+    Check an email address for suspicious characteristics.
+    Compares the domain to known free/disposable providers and checks
+    if it matches the claimed company name.
     """
-    fake_score = model_fake_prob
-    reasons: list[str] = []
+    username, domain = email_address.split("@", 1)
+    domain_lower = domain.lower()
+    red_flags = []
 
-    if api_found:
-        fake_score *= 0.8
-        reasons.append("Found on public job index (Adzuna)")
+    # Check if it's a free email provider
+    if domain_lower in FREE_EMAIL_PROVIDERS:
+        red_flags.append("free_domain")
 
-    for e in email_checks:
-        for s in e["signals"]:
-            if s == "free_domain":
-                fake_score = min(1.0, fake_score + 0.10)
-                reasons.append(f"Free email domain: {e['domain']}")
-            if s == "disposable_like":
-                fake_score = min(1.0, fake_score + 0.20)
-                reasons.append(f"Disposable-like email: {e['domain']}")
-            if s == "company_domain_mismatch":
-                fake_score = min(1.0, fake_score + 0.15)
-                reasons.append(f"Email domain does not match company: {e['domain']}")
+    # Check if it looks like a disposable email service
+    for pattern in DISPOSABLE_EMAIL_PATTERNS:
+        if pattern in domain_lower:
+            red_flags.append("disposable_like")
+            break
 
-    if kw_hits:
-        bump = min(0.25, 0.05 * len(kw_hits))
-        fake_score = min(1.0, fake_score + bump)
-        reasons.append("Suspicious phrases: " + ", ".join(kw_hits[:5]))
-
-    fake_pct = round(fake_score * 100, 1)
-    real_pct = round((1 - fake_score) * 100, 1)
+    # Check if the domain matches the company name
+    if company_name:
+        # Strip out non-alphanumeric characters for comparison
+        company_cleaned = re.sub(r"[^a-z0-9]", "", company_name.lower())
+        domain_cleaned = re.sub(r"[^a-z0-9]", "", domain_lower.split(".")[0])
+        
+        if company_cleaned and company_cleaned not in domain_cleaned:
+            red_flags.append("company_domain_mismatch")
 
     return {
-        "real_pct": real_pct,
-        "fake_pct": fake_pct,
-        "reasons": reasons,
+        "email": email_address,
+        "domain": domain_lower,
+        "signals": red_flags
     }
 
 
-# ------------ one-call helper for the app ------------
+def find_suspicious_keywords(text):
+    """Look for common scam phrases in the job posting text"""
+    normalized = normalize_text(text)
+    found_keywords = []
+    
+    for phrase in SUSPICIOUS_PHRASES:
+        if phrase in normalized:
+            found_keywords.append(phrase)
+    
+    return found_keywords
 
-def verify_all(
-    title: str,
-    description: str,
-    company: str = "",
-    location: str = "",
-) -> dict:
+
+def calculate_fraud_probability(model_prediction, found_on_adzuna, email_analysis, suspicious_keywords):
     """
-    Run all checks in one call so the Streamlit app
-    can just call verify_all(...) once.
+    Combine all our checks into a final probability that the job is fake.
+    Takes the ML model's prediction and adjusts it based on other evidence.
     """
-    guessed_company = _guess_company(title, description, company)
-    api = adzuna_search(title, company=guessed_company, where=location)
+    fraud_probability = model_prediction
+    explanation = []
 
-    emails = extract_emails(description)
-    email_checks = [check_email_domain(e, claimed_company=guessed_company) for e in emails]
+    # If we found the job on Adzuna, it's more likely to be real
+    if found_on_adzuna:
+        fraud_probability *= 0.8
+        explanation.append("Found on public job index (Adzuna)")
 
-    kw_hits = detect_keywords(f"{title} {description}")
+    # Check all the email addresses for red flags
+    for email_check in email_analysis:
+        for warning in email_check["signals"]:
+            if warning == "free_domain":
+                fraud_probability = min(1.0, fraud_probability + 0.10)
+                explanation.append(f"Free email domain: {email_check['domain']}")
+            
+            elif warning == "disposable_like":
+                fraud_probability = min(1.0, fraud_probability + 0.20)
+                explanation.append(f"Disposable-like email: {email_check['domain']}")
+            
+            elif warning == "company_domain_mismatch":
+                fraud_probability = min(1.0, fraud_probability + 0.15)
+                explanation.append(f"Email domain does not match company: {email_check['domain']}")
+
+    # Add points for each suspicious keyword found (up to a limit)
+    if suspicious_keywords:
+        keyword_penalty = min(0.25, 0.05 * len(suspicious_keywords))
+        fraud_probability = min(1.0, fraud_probability + keyword_penalty)
+        explanation.append("Suspicious phrases: " + ", ".join(suspicious_keywords[:5]))
+
+    # Convert to percentages
+    fake_percentage = round(fraud_probability * 100, 1)
+    real_percentage = round((1 - fraud_probability) * 100, 1)
 
     return {
-        "api": api,
+        "real_pct": real_percentage,
+        "fake_pct": fake_percentage,
+        "reasons": explanation,
+    }
+
+
+def run_full_verification(job_title, job_description, company_name="", job_location=""):
+    """
+    Main function that runs all verification checks on a job posting.
+    This is what the Streamlit app calls to check if a job is legitimate.
+    """
+    # Try to figure out the company name if not provided
+    actual_company = extract_company_name(job_title, job_description, company_name)
+    
+    # Search Adzuna to see if this job exists on legitimate job boards
+    adzuna_results = search_adzuna_jobs(
+        job_title, 
+        company_name=actual_company, 
+        where=job_location
+    )
+
+    # Extract and analyze any email addresses in the posting
+    email_addresses = find_email_addresses(job_description)
+    email_checks = [
+        analyze_email_domain(email, claimed_company=actual_company) 
+        for email in email_addresses
+    ]
+
+    # Look for suspicious keywords in the job posting
+    full_text = f"{job_title} {job_description}"
+    suspicious_words = find_suspicious_keywords(full_text)
+
+    return {
+        "api": adzuna_results,
         "emails": email_checks,
-        "kw_hits": kw_hits,
+        "kw_hits": suspicious_words,
     }
+
+
+# Backward compatibility aliases - these allow existing code to keep using the old function names
+def verify_all(title, description, company="", location=""):
+    """
+    Legacy function name - calls run_full_verification.
+    Kept for backward compatibility with existing code.
+    """
+    return run_full_verification(title, description, company, location)
+
+
+def compute_confidence(model_fake_prob, api_found, email_checks, kw_hits):
+    """
+    Legacy function name - calls calculate_fraud_probability.
+    Kept for backward compatibility with existing code.
+    """
+    return calculate_fraud_probability(model_fake_prob, api_found, email_checks, kw_hits)
