@@ -21,49 +21,49 @@ vectorizer = joblib.load(VECTORIZER_PATH)
 
 # Configure the Streamlit page
 st.set_page_config(
-    page_title="Fake Job Posting Detector", 
-    page_icon="🕵️‍♂️", 
+    page_title="Fake Job Posting Detector",
+    page_icon="🕵️‍♂️",
     layout="wide"
 )
 
 # Add custom CSS styling
 st.markdown("""
 <style>
-.block-container { 
-    max-width: 1100px !important; 
+.block-container {
+    max-width: 1100px !important;
 }
 
-:root { 
-    --brand: #3b5bdb; 
-    --brand2: #7c3aed; 
-    --muted: #6b7280; 
+:root {
+    --brand: #3b5bdb;
+    --brand2: #7c3aed;
+    --muted: #6b7280;
 }
 
 .hero-wrap {
     margin: -3rem -4rem 2rem -4rem;
     padding: 64px 0;
     background: linear-gradient(135deg, var(--brand), var(--brand2));
-    color: #fff; 
+    color: #fff;
     text-align: center;
 }
 
-.hero-title { 
-    font-size: 56px; 
-    line-height: 1.1; 
-    font-weight: 800; 
-    margin: 0; 
+.hero-title {
+    font-size: 56px;
+    line-height: 1.1;
+    font-weight: 800;
+    margin: 0;
 }
 
-.hero-sub { 
-    font-size: 16px; 
-    opacity: .95; 
-    margin-top: 10px; 
+.hero-sub {
+    font-size: 16px;
+    opacity: .95;
+    margin-top: 10px;
 }
 
-.hero-bullets { 
-    margin-top: 10px; 
-    font-size: 14px; 
-    opacity: .9; 
+.hero-bullets {
+    margin-top: 10px;
+    font-size: 14px;
+    opacity: .9;
 }
 
 .card {
@@ -77,9 +77,9 @@ st.markdown("""
 }
 
 @media (prefers-color-scheme: dark) {
-    .card { 
-        background: #0f172a; 
-        border-color: #334155; 
+    .card {
+        background: #0f172a;
+        border-color: #334155;
     }
 }
 
@@ -98,142 +98,142 @@ div[data-testid="stVerticalBlock"] > div:has(> div[data-testid="stTextArea"]) {
 }
 
 .stTextInput > div > div > input,
-.stTextArea > div > textarea { 
-    border-radius: 12px; 
+.stTextArea > div > textarea {
+    border-radius: 12px;
 }
 
 .stButton > button {
-    width: 100%; 
-    height: 46px; 
+    width: 100%;
+    height: 46px;
     border-radius: 12px;
-    background: #334155; 
-    border: 1px solid #334155; 
-    color: #fff; 
+    background: #334155;
+    border: 1px solid #334155;
+    color: #fff;
     font-weight: 600;
 }
 
-.stButton > button:hover { 
-    background: #1f2937; 
-    border-color: #1f2937; 
+.stButton > button:hover {
+    background: #1f2937;
+    border-color: #1f2937;
 }
 
-.section-title { 
-    text-align: center; 
-    margin: 24px 0 8px; 
-    font-size: 32px; 
-    font-weight: 800; 
+.section-title {
+    text-align: center;
+    margin: 24px 0 8px;
+    font-size: 32px;
+    font-weight: 800;
 }
 
-.section-sub { 
-    text-align: center; 
-    color: var(--muted); 
-    margin-bottom: 18px; 
+.section-sub {
+    text-align: center;
+    color: var(--muted);
+    margin-bottom: 18px;
 }
 
-.info-grid { 
-    display: grid; 
-    grid-template-columns: repeat(3, 1fr); 
-    gap: 16px; 
+.info-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
 }
 
 .info-card {
-    background: #fff; 
-    border: 1px solid #e5e7eb; 
+    background: #fff;
+    border: 1px solid #e5e7eb;
     border-radius: 14px;
-    padding: 16px; 
+    padding: 16px;
     box-shadow: 0 6px 22px rgba(2,6,23,.05);
 }
 
-.info-card h4 { 
-    margin: .25rem 0 .25rem; 
+.info-card h4 {
+    margin: .25rem 0 .25rem;
 }
 
-.info-card p { 
-    color: #6b7280; 
-    font-size: 14px; 
-    margin: 0; 
+.info-card p {
+    color: #6b7280;
+    font-size: 14px;
+    margin: 0;
 }
 
 @media (prefers-color-scheme: dark) {
-    .info-card { 
-        background: #0f172a; 
-        border-color: #334155; 
+    .info-card {
+        background: #0f172a;
+        border-color: #334155;
     }
-    .info-card p { 
-        color: #94a3b8; 
+    .info-card p {
+        color: #94a3b8;
     }
 }
 
-.metrics { 
-    display: flex; 
-    gap: 14px; 
-    margin-top: 8px; 
+.metrics {
+    display: flex;
+    gap: 14px;
+    margin-top: 8px;
 }
 
-.metric { 
-    flex: 1; 
-    text-align: center; 
-    border: 1px solid #e5e7eb; 
-    border-radius: 12px; 
-    padding: 12px; 
+.metric {
+    flex: 1;
+    text-align: center;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 12px;
 }
 
-.metric small { 
-    color: #6b7280; 
+.metric small {
+    color: #6b7280;
 }
 
-.metric h3 { 
-    margin: .25rem 0; 
-    font-size: 28px; 
+.metric h3 {
+    margin: .25rem 0;
+    font-size: 28px;
 }
 
-@media (prefers-color-scheme: dark) { 
-    .metric { 
-        border-color: #334155; 
-    } 
+@media (prefers-color-scheme: dark) {
+    .metric {
+        border-color: #334155;
+    }
 }
 
 .conf-bar {
-    width: 100%; 
-    height: 10px; 
-    border-radius: 999px; 
+    width: 100%;
+    height: 10px;
+    border-radius: 999px;
     margin-top: 12px;
     background: linear-gradient(90deg, #22c55e 0%, #22c55e var(--real), #ef4444 var(--real), #ef4444 100%);
     border: 1px solid #e5e7eb;
 }
 
-@media (prefers-color-scheme: dark) { 
-    .conf-bar { 
-        border-color: #334155; 
-    } 
+@media (prefers-color-scheme: dark) {
+    .conf-bar {
+        border-color: #334155;
+    }
 }
 
 .result {
-    margin-top: 12px; 
-    padding: 14px; 
-    border-radius: 12px; 
-    font-weight: 600; 
+    margin-top: 12px;
+    padding: 14px;
+    border-radius: 12px;
+    font-weight: 600;
     border: 1px solid;
 }
 
-.result.real { 
-    background: rgba(34,197,94,.12); 
-    color: #065f46; 
-    border-color: rgba(34,197,94,.4); 
+.result.real {
+    background: rgba(34,197,94,.12);
+    color: #065f46;
+    border-color: rgba(34,197,94,.4);
 }
 
-.result.fake { 
-    background: rgba(239,68,68,.12); 
-    color: #7f1d1d; 
-    border-color: rgba(239,68,68,.4); 
+.result.fake {
+    background: rgba(239,68,68,.12);
+    color: #7f1d1d;
+    border-color: rgba(239,68,68,.4);
 }
 
 section[data-testid="stHeader"] div:has(> div:empty),
 div[data-testid="stVerticalBlock"] > div:empty {
-    display: none !important; 
-    visibility: hidden !important; 
+    display: none !important;
+    visibility: hidden !important;
     height: 0 !important;
-    margin: 0 !important; 
+    margin: 0 !important;
     padding: 0 !important;
 }
 </style>
@@ -252,8 +252,8 @@ st.markdown("""
 st.markdown('<div class="card">', unsafe_allow_html=True)
 job_title = st.text_input("Job Title", placeholder="e.g., Senior Software Engineer")
 job_description = st.text_area(
-    "Job Description", 
-    placeholder="Paste the complete job posting here...", 
+    "Job Description",
+    placeholder="Paste the complete job posting here...",
     height=140
 )
 company_name = st.text_input("Company (optional)")
@@ -268,6 +268,7 @@ def get_verification_signals(title, description, company, location):
     Fetch verification signals from external sources.
     Results are cached for 10 minutes to reduce API calls.
     """
+    # IMPORTANT: pass `location=` (not `where=`)
     return verify_all(title, description, company=company, location=location)
 
 
@@ -282,14 +283,14 @@ def get_model_probabilities(vectorized_input):
         fake_prob = float(probabilities[1])
         real_prob = 1.0 - fake_prob
         return fake_prob, real_prob
-    
+
     # Fall back to decision_function for SVM-like models
     if hasattr(model, "decision_function"):
         decision_score = float(model.decision_function(vectorized_input)[0])
         fake_prob = 1.0 / (1.0 + np.exp(-decision_score))
         real_prob = 1.0 - fake_prob
         return fake_prob, real_prob
-    
+
     # Last resort: use predict for binary classification
     prediction = int(model.predict(vectorized_input)[0])
     if prediction == 1:
@@ -304,7 +305,7 @@ def build_api_verification_card(api_data):
         sample_job = api_data.get("sample") or {}
         job_url = sample_job.get('url', '')
         url_link = f'<a href="{job_url}" target="_blank" style="font-size:13px;color:#3b82f6;">Open ↗</a>' if job_url else ''
-        
+
         return f"""
         <div class="info-card" style="border-left:6px solid #22c55e;">
             <h4>🌐 Public Index (Adzuna)</h4>
@@ -333,7 +334,7 @@ def build_email_verification_card(email_checks):
             else:
                 success = f"✅ {email_data['email']} looks okay."
                 email_results.append(success)
-        
+
         return f"""
         <div class="info-card" style="border-left:6px solid #3b82f6;">
             <h4>📧 Emails</h4>
@@ -378,18 +379,18 @@ if analyze_button:
         combined_text = f"{job_title} {job_description}".strip()
         cleaned_text = clean_text(combined_text)
         vectorized_text = vectorizer.transform([cleaned_text])
-        
+
         # Get model predictions
         fake_prob_model, real_prob_model = get_model_probabilities(vectorized_text)
-        
+
         # Get verification signals from external sources
         verification_signals = get_verification_signals(
-            job_title, 
-            job_description, 
-            company_name, 
-            job_location
+            job_title,
+            job_description,
+            company_name,
+            job_location,      # <- passed as location
         )
-        
+
         # Combine model prediction with verification signals
         combined_confidence = compute_confidence(
             model_fake_prob=fake_prob_model,
@@ -397,16 +398,16 @@ if analyze_button:
             email_checks=verification_signals["emails"],
             kw_hits=verification_signals["kw_hits"],
         )
-        
+
         # Extract final results
         real_percentage = combined_confidence["real_pct"]
         fake_percentage = combined_confidence["fake_pct"]
         explanation_reasons = combined_confidence["reasons"]
         is_likely_fake = fake_percentage >= 50.0
-        
+
         # Display results card
         st.markdown('<div class="card">', unsafe_allow_html=True)
-        
+
         # Show confidence metrics
         st.markdown(f"""
         <div class="metrics">
@@ -420,25 +421,25 @@ if analyze_button:
             </div>
         </div>
         """, unsafe_allow_html=True)
-        
+
         # Show confidence bar
         st.markdown(
-            f'<div class="conf-bar" style="--real:{real_percentage}%;"></div>', 
+            f'<div class="conf-bar" style="--real:{real_percentage}%;"></div>',
             unsafe_allow_html=True
         )
-        
+
         # Show verdict
         if is_likely_fake:
             st.markdown(
-                '<div class="result fake">❌ This job looks FAKE.</div>', 
+                '<div class="result fake">❌ This job looks FAKE.</div>',
                 unsafe_allow_html=True
             )
         else:
             st.markdown(
-                '<div class="result real">✅ This job appears REAL.</div>', 
+                '<div class="result real">✅ This job appears REAL.</div>',
                 unsafe_allow_html=True
             )
-        
+
         # Show raw model score for transparency
         real_model_pct = round(real_prob_model * 100, 1)
         fake_model_pct = round(fake_prob_model * 100, 1)
@@ -446,7 +447,7 @@ if analyze_button:
             f"Model-only score (before verification): "
             f"Real {real_model_pct}% · Fake {fake_model_pct}%"
         )
-        
+
         # Verification insights section
         st.markdown("""
         <hr style="margin:2rem 0;border:none;border-top:1px solid #e5e7eb;">
@@ -455,17 +456,17 @@ if analyze_button:
             <p style="color:#6b7280;font-size:15px;">Cross-check using public job index, email domains, and risky phrases.</p>
         </div>
         """, unsafe_allow_html=True)
-        
+
         # Build verification cards
         st.markdown('<div class="info-grid">', unsafe_allow_html=True)
-        
+
         api_card = build_api_verification_card(verification_signals["api"])
         email_card = build_email_verification_card(verification_signals["emails"])
         keyword_card = build_keyword_verification_card(verification_signals["kw_hits"])
-        
+
         st.markdown(api_card + email_card + keyword_card, unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
-        
+
         # Show explanation if available
         if explanation_reasons:
             reasons_text = ' · '.join(explanation_reasons)
@@ -474,13 +475,13 @@ if analyze_button:
                 f"Why this score: {reasons_text}</p>",
                 unsafe_allow_html=True,
             )
-        
+
         st.markdown('</div>', unsafe_allow_html=True)
 
 # Information section at the bottom
 st.markdown('<div class="section-title">How It Works</div>', unsafe_allow_html=True)
 st.markdown(
-    '<div class="section-sub">Cutting-edge AI technology to keep you safe from job scams</div>', 
+    '<div class="section-sub">Cutting-edge AI technology to keep you safe from job scams</div>',
     unsafe_allow_html=True
 )
 st.markdown("""

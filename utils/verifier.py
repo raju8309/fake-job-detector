@@ -41,7 +41,7 @@ def extract_company_name(job_title, job_description, company_input=""):
     # Look for email addresses like hr@company.com
     email_pattern = r"[A-Za-z0-9._%+-]+@([A-Za-z0-9.-]+)\.[A-Za-z]{2,}"
     email_match = re.search(email_pattern, job_description or "")
-    
+
     if email_match:
         domain = email_match.group(1).lower()
         # Get the first part of the domain (before any dots or hyphens)
@@ -52,7 +52,7 @@ def extract_company_name(job_title, job_description, company_input=""):
     capitalized_word = re.search(r"\b([A-Z][a-zA-Z]+)\b", job_description or "")
     if capitalized_word:
         return capitalized_word.group(1)
-    
+
     return ""
 
 
@@ -77,7 +77,7 @@ def search_adzuna_jobs(job_title, company_name="", location="", country="us", nu
     # Search through multiple pages of results
     for page_num in range(1, num_pages + 1):
         api_url = f"https://api.adzuna.com/v1/api/jobs/{country}/search/{page_num}"
-        
+
         query_params = {
             "app_id": ADZUNA_APP_ID,
             "app_key": ADZUNA_APP_KEY,
@@ -98,13 +98,13 @@ def search_adzuna_jobs(job_title, company_name="", location="", country="us", nu
         # Check each job posting for matches
         for job in job_data.get("results", []):
             job_title_from_api = normalize_text(job.get("title"))
-            
+
             company_info = job.get("company") or {}
             job_company_from_api = normalize_text(company_info.get("display_name"))
 
             # Calculate how similar the titles are
             title_similarity = calculate_similarity(normalized_title, job_title_from_api)
-            
+
             # Only check company similarity if we have a company name to compare
             if normalized_company:
                 company_similarity = calculate_similarity(normalized_company, job_company_from_api)
@@ -114,7 +114,7 @@ def search_adzuna_jobs(job_title, company_name="", location="", country="us", nu
             # Count as a match if both title and company are similar enough
             if title_similarity >= 75 and company_similarity >= 70:
                 total_matches += 1
-                
+
                 # Save the first good match as an example
                 if not best_match:
                     best_match = {
@@ -127,7 +127,7 @@ def search_adzuna_jobs(job_title, company_name="", location="", country="us", nu
     return {
         "found": total_matches > 0,
         "matches": total_matches,
-        "sample": best_match
+        "sample": best_match,
     }
 
 
@@ -205,14 +205,14 @@ def analyze_email_domain(email_address, company_name=None):
         # Strip out non-alphanumeric characters for comparison
         company_cleaned = re.sub(r"[^a-z0-9]", "", company_name.lower())
         domain_cleaned = re.sub(r"[^a-z0-9]", "", domain_lower.split(".")[0])
-        
+
         if company_cleaned and company_cleaned not in domain_cleaned:
             red_flags.append("company_domain_mismatch")
 
     return {
         "email": email_address,
         "domain": domain_lower,
-        "signals": red_flags
+        "signals": red_flags,
     }
 
 
@@ -220,11 +220,11 @@ def find_suspicious_keywords(text):
     """Look for common scam phrases in the job posting text"""
     normalized = normalize_text(text)
     found_keywords = []
-    
+
     for phrase in SUSPICIOUS_PHRASES:
         if phrase in normalized:
             found_keywords.append(phrase)
-    
+
     return found_keywords
 
 
@@ -247,11 +247,11 @@ def calculate_fraud_probability(model_prediction, found_on_adzuna, email_analysi
             if warning == "free_domain":
                 fraud_probability = min(1.0, fraud_probability + 0.10)
                 explanation.append(f"Free email domain: {email_check['domain']}")
-            
+
             elif warning == "disposable_like":
                 fraud_probability = min(1.0, fraud_probability + 0.20)
                 explanation.append(f"Disposable-like email: {email_check['domain']}")
-            
+
             elif warning == "company_domain_mismatch":
                 fraud_probability = min(1.0, fraud_probability + 0.15)
                 explanation.append(f"Email domain does not match company: {email_check['domain']}")
@@ -280,18 +280,18 @@ def run_full_verification(job_title, job_description, company_name="", job_locat
     """
     # Try to figure out the company name if not provided
     actual_company = extract_company_name(job_title, job_description, company_name)
-    
+
     # Search Adzuna to see if this job exists on legitimate job boards
     adzuna_results = search_adzuna_jobs(
-        job_title, 
-        company_name=actual_company, 
-        where=job_location
+        job_title,
+        company_name=actual_company,
+        location=job_location,   # <-- FIXED: use location keyword
     )
 
     # Extract and analyze any email addresses in the posting
     email_addresses = find_email_addresses(job_description)
     email_checks = [
-        analyze_email_domain(email, claimed_company=actual_company) 
+        analyze_email_domain(email, company_name=actual_company)  # <-- FIXED keyword
         for email in email_addresses
     ]
 
