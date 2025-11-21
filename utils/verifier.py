@@ -285,13 +285,13 @@ def run_full_verification(job_title, job_description, company_name="", job_locat
     adzuna_results = search_adzuna_jobs(
         job_title,
         company_name=actual_company,
-        location=job_location,   # <-- FIXED: use location keyword
+        location=job_location,
     )
 
     # Extract and analyze any email addresses in the posting
     email_addresses = find_email_addresses(job_description)
     email_checks = [
-        analyze_email_domain(email, company_name=actual_company)  # <-- FIXED keyword
+        analyze_email_domain(email, company_name=actual_company)
         for email in email_addresses
     ]
 

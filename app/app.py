@@ -268,7 +268,6 @@ def get_verification_signals(title, description, company, location):
     Fetch verification signals from external sources.
     Results are cached for 10 minutes to reduce API calls.
     """
-    # IMPORTANT: pass `location=` (not `where=`)
     return verify_all(title, description, company=company, location=location)
 
 
@@ -304,13 +303,19 @@ def build_api_verification_card(api_data):
     if api_data.get("found"):
         sample_job = api_data.get("sample") or {}
         job_url = sample_job.get('url', '')
-        url_link = f'<a href="{job_url}" target="_blank" style="font-size:13px;color:#3b82f6;">Open ↗</a>' if job_url else ''
+        url_link = (
+            f'<a href="{job_url}" target="_blank" '
+            f'style="font-size:13px;color:#3b82f6;">Open ↗</a>'
+            if job_url else ''
+        )
 
         return f"""
         <div class="info-card" style="border-left:6px solid #22c55e;">
             <h4>🌐 Public Index (Adzuna)</h4>
             <p>✅ Found {api_data.get('matches', 1)} similar job(s).</p>
-            <p style="font-size:13px;color:#555;">{sample_job.get('title', '')} — {sample_job.get('company', '')}</p>
+            <p style="font-size:13px;color:#555;">
+                {sample_job.get('title', '')} — {sample_job.get('company', '')}
+            </p>
             {url_link}
         </div>
         """
@@ -388,7 +393,7 @@ if analyze_button:
             job_title,
             job_description,
             company_name,
-            job_location,      # <- passed as location
+            job_location,
         )
 
         # Combine model prediction with verification signals
@@ -453,7 +458,9 @@ if analyze_button:
         <hr style="margin:2rem 0;border:none;border-top:1px solid #e5e7eb;">
         <div style="text-align:center;margin-bottom:1rem;">
             <h2 style="margin-bottom:0;">🔍 Verification Insights</h2>
-            <p style="color:#6b7280;font-size:15px;">Cross-check using public job index, email domains, and risky phrases.</p>
+            <p style="color:#6b7280;font-size:15px;">
+                Cross-check using public job index, email domains, and risky phrases.
+            </p>
         </div>
         """, unsafe_allow_html=True)
 
