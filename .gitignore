@@ -1,5 +1,15 @@
-echo "__pycache__/" >> .gitignore
-echo "*.pkl" >> .gitignore
-echo ".DS_Store" >> .gitignore
-git add .gitignore
-git commit -m "chore: add .gitignore file to exclude temp files"
+# Python envs
+venv/
+create/
+**/__pycache__/
+*.pyc
+*.pkl
+
+# Node / Next.js
+frontend/node_modules/
+frontend/.next/
+
+# OS / editor
+.DS_Store
+*.log
+.vscode/
