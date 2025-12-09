@@ -66,7 +66,7 @@ app = FastAPI(title="Fake Job Detector API", version="1.0.0")
 # CORS - Update with your Vercel domain for production
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Change to ["https://your-app.vercel.app"] in production
+    allow_origins=["*", "https://fake-job-detector-iota.vercel.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
