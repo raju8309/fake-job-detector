@@ -1,5 +1,6 @@
 # Python envs
-venv/
+/venv/
+
 create/
 **/__pycache__/
 *.pyc
@@ -13,3 +14,4 @@ frontend/.next/
 .DS_Store
 *.log
 .vscode/
+
