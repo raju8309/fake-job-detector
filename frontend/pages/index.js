@@ -8,23 +8,36 @@ export default function Home() {
   const [description, setDescription] = useState("");
   const [company, setCompany] = useState("");
   const [location, setLocation] = useState("");
-
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
+  const [isWarmingUp, setIsWarmingUp] = useState(false);
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
     setResult(null);
+    setIsWarmingUp(false);
 
     if (!title.trim() || !description.trim()) {
       setError("Please enter both Job Title and Job Description.");
       return;
     }
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, 30000); // 30 second timeout
+
     try {
       setLoading(true);
+      
+      // Show warming up message after 3 seconds
+      const warmupTimer = setTimeout(() => {
+        setIsWarmingUp(true);
+      }, 3000);
+
+      // FIXED: Proper template literal syntax
       const res = await fetch(`${API_BASE}/analyze-job`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -32,9 +45,13 @@ export default function Home() {
           title,
           description,
           company,
-          location
-        })
+          location,
+        }),
+        signal: controller.signal,
       });
+
+      clearTimeout(warmupTimer);
+      clearTimeout(timeoutId);
 
       if (!res.ok) {
         throw new Error(`Request failed: ${res.status}`);
@@ -44,9 +61,22 @@ export default function Home() {
       setResult(data);
     } catch (err) {
       console.error(err);
-      setError("Something went wrong while analyzing the job.");
+      clearTimeout(timeoutId);
+      
+      if (err.name === "AbortError") {
+        setError(
+          "Request timed out. The server might be waking up from sleep. Please try again in a moment."
+        );
+      } else if (err.message.includes("Failed to fetch") || err.message.includes("NetworkError")) {
+        setError(
+          "Cannot connect to the server. Please check if the backend is running or try again later."
+        );
+      } else {
+        setError("Something went wrong while analyzing the job. Please try again.");
+      }
     } finally {
       setLoading(false);
+      setIsWarmingUp(false);
     }
   }
 
@@ -113,6 +143,18 @@ export default function Home() {
 
             {error && <p className="error-text">{error}</p>}
 
+            {/* Loading state with helpful messages */}
+            {loading && (
+              <div className="loading-state">
+                <div className="spinner"></div>
+                <p>
+                  {isWarmingUp
+                    ? "🔥 Warming up the server... This happens after inactivity. Thanks for your patience!"
+                    : "🔎 Analyzing job posting..."}
+                </p>
+              </div>
+            )}
+
             <button className="primary-btn" type="submit" disabled={loading}>
               {loading ? "Analyzing..." : "🔎 Analyze Job Posting"}
             </button>
@@ -128,8 +170,8 @@ export default function Home() {
               }`}
             >
               {result.verdict === "fake"
-                ? "This job looks FAKE (High Risk)"
-                : "This job appears REAL (Low Risk)"}
+                ? "⚠️ This job looks FAKE (High Risk)"
+                : "✅ This job appears REAL (Low Risk)"}
             </div>
 
             <div className="metrics">
@@ -146,15 +188,13 @@ export default function Home() {
             <div
               className="conf-bar"
               style={{
-                // Real percentage controls green/red split
-                // CSS gradient is defined in globals.css
-                "--realPct": `${result.real_pct}%`
+                "--realPct": `${result.real_pct}%`,
               }}
             />
 
             <p className="model-caption">
-              <strong>Model-only score (for transparency):</strong>{" "}
-              Real {result.model_real_pct}% · Fake {result.model_fake_pct}%
+              <strong>Model-only score (for transparency):</strong> Real{" "}
+              {result.model_real_pct}% · Fake {result.model_fake_pct}%
             </p>
 
             {/* Verification insights */}
@@ -174,8 +214,8 @@ export default function Home() {
                   <>
                     <p>
                       ✅ Found{" "}
-                      <strong>{result.verification.api.matches}</strong>{" "}
-                      similar job(s) in the public index.
+                      <strong>{result.verification.api.matches}</strong> similar
+                      job(s) in the public index.
                     </p>
                     {result.verification.api.sample && (
                       <p className="small-text">
@@ -198,7 +238,7 @@ export default function Home() {
                     )}
                   </>
                 ) : (
-                  <p>No matching results found for this title/company.</p>
+                  <p>❌ No matching results found for this title/company.</p>
                 )}
               </div>
 
@@ -228,13 +268,12 @@ export default function Home() {
               <div className="info-card insight-card">
                 <h4 data-icon="🚨">Risky Keywords</h4>
                 {result.verification.kw_hits.length === 0 ? (
-                  <p>No known risky or scam-related phrases detected.</p>
+                  <p>✅ No known risky or scam-related phrases detected.</p>
                 ) : (
                   <p>
-                    Found{" "}
+                    ⚠️ Found{" "}
                     <strong>{result.verification.kw_hits.length}</strong> scam
-                    phrases:{" "}
-                    {result.verification.kw_hits.slice(0, 6).join(", ")}
+                    phrases: {result.verification.kw_hits.slice(0, 6).join(", ")}
                   </p>
                 )}
               </div>
@@ -242,8 +281,7 @@ export default function Home() {
 
             {result.reasons && result.reasons.length > 0 && (
               <p className="reasons">
-                <strong>Key factors:</strong>{" "}
-                {result.reasons.join(" · ")}
+                <strong>Key factors:</strong> {result.reasons.join(" · ")}
               </p>
             )}
           </section>
@@ -255,7 +293,6 @@ export default function Home() {
           <p className="section-sub">
             Cutting-edge AI technology to keep you safe from job scams.
           </p>
-
           <div className="info-grid">
             <div className="info-card">
               <h4 data-icon="🤖">AI-Powered Analysis</h4>

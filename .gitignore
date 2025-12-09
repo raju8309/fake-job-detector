@@ -1,5 +1,5 @@
 # Python envs
-/venv/
+venv/
 
 create/
 **/__pycache__/
