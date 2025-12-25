@@ -78,6 +78,13 @@ def load_rag_index():
 
     current_model, current_vectorizer = load_models()
 
+    if os.getenv("ENABLE_RAG", "0").strip() not in {"1", "true", "TRUE", "yes", "YES"}:
+        rag_index = {
+            "ready": False,
+            "note": "rag disabled",
+        }
+        return rag_index
+
     if not SCAM_DATA_PATH.exists():
         rag_index = {
             "ready": False,
@@ -85,40 +92,60 @@ def load_rag_index():
         }
         return rag_index
 
-    df = pd.read_csv(SCAM_DATA_PATH)
-    if "fraudulent" not in df.columns:
-        rag_index = {
-            "ready": False,
-            "note": "dataset missing fraudulent column",
-        }
-        return rag_index
+    chunksize = int(os.getenv("RAG_CSV_CHUNKSIZE", "2000"))
+    max_rows = int(os.getenv("RAG_MAX_ROWS", "0"))
 
-    scam_df = df[df["fraudulent"] == 1].copy()
+    needed_cols = ["job_id", "title", "location", "description", "fraudulent"]
+    texts = []
+    meta = []
+    seen = 0
 
     def safe_str(x):
         if x is None:
             return ""
         return str(x)
 
-    texts = (
-        scam_df["title"].apply(safe_str)
-        + " "
-        + scam_df["description"].apply(safe_str)
-    ).tolist()
-    cleaned_texts = [clean_text(t) for t in texts]
-    matrix = current_vectorizer.transform(cleaned_texts)
-
-    meta = []
-    for _, row in scam_df.iterrows():
-        desc = safe_str(row.get("description", ""))
-        meta.append(
-            {
-                "job_id": int(row.get("job_id")) if not pd.isna(row.get("job_id")) else None,
-                "title": safe_str(row.get("title", ""))[:160],
-                "location": safe_str(row.get("location", ""))[:120],
-                "snippet": desc.replace("\n", " ")[:240],
+    for chunk in pd.read_csv(SCAM_DATA_PATH, usecols=lambda c: c in needed_cols, chunksize=chunksize):
+        if "fraudulent" not in chunk.columns:
+            rag_index = {
+                "ready": False,
+                "note": "dataset missing fraudulent column",
             }
-        )
+            return rag_index
+
+        scam_chunk = chunk[chunk["fraudulent"] == 1]
+        if len(scam_chunk) == 0:
+            continue
+
+        for _, row in scam_chunk.iterrows():
+            title = safe_str(row.get("title", ""))
+            desc = safe_str(row.get("description", ""))
+            combined = f"{title} {desc}".strip()
+            texts.append(clean_text(combined))
+            meta.append(
+                {
+                    "job_id": int(row.get("job_id")) if not pd.isna(row.get("job_id")) else None,
+                    "title": title[:160],
+                    "location": safe_str(row.get("location", ""))[:120],
+                    "snippet": desc.replace("\n", " ")[:240],
+                }
+            )
+
+            seen += 1
+            if max_rows > 0 and seen >= max_rows:
+                break
+
+        if max_rows > 0 and seen >= max_rows:
+            break
+
+    if not texts:
+        rag_index = {
+            "ready": False,
+            "note": "no scam rows indexed",
+        }
+        return rag_index
+
+    matrix = current_vectorizer.transform(texts)
 
     rag_index = {
         "ready": True,
@@ -196,11 +223,18 @@ async def startup_event():
     """Preload models on startup"""
     logger.info("Starting up...")
     load_models()
-    load_shap_explainer()
-    try:
-        load_rag_index()
-    except Exception as e:
-        logger.warning(f"RAG index load failed: {str(e)}")
+
+    if os.getenv("PRELOAD_SHAP", "0").strip() in {"1", "true", "TRUE", "yes", "YES"}:
+        try:
+            load_shap_explainer()
+        except Exception as e:
+            logger.warning(f"SHAP preload failed: {str(e)}")
+
+    if os.getenv("PRELOAD_RAG", "0").strip() in {"1", "true", "TRUE", "yes", "YES"}:
+        try:
+            load_rag_index()
+        except Exception as e:
+            logger.warning(f"RAG index load failed: {str(e)}")
     logger.info("Ready to serve requests")
 
 # Helper function
