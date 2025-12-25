@@ -18,3 +18,7 @@ backend/pipeline/mlruns/
 *.log
 .vscode/
 
+# Environment variables
+frontend/.env.local
+.env.local
+
