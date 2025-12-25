@@ -13,6 +13,50 @@ export default function Home() {
   const [result, setResult] = useState(null);
   const [isWarmingUp, setIsWarmingUp] = useState(false);
 
+  function renderHighlightedText(text, explainability) {
+    if (!text || !explainability || !Array.isArray(explainability.tokens)) {
+      return <span>{text}</span>;
+    }
+
+    const tokenMap = new Map();
+    for (const t of explainability.tokens) {
+      if (!t || !t.token) continue;
+      const key = String(t.token).trim().toLowerCase();
+      if (!key) continue;
+      tokenMap.set(key, t);
+    }
+
+    const parts = text.split(/(\s+)/);
+    return parts.map((part, idx) => {
+      if (/^\s+$/.test(part)) {
+        return <span key={idx}>{part}</span>;
+      }
+
+      const normalized = part
+        .toLowerCase()
+        .replace(/^[^a-z0-9]+|[^a-z0-9]+$/gi, "");
+
+      const tokenInfo = tokenMap.get(normalized);
+      if (!tokenInfo) {
+        return <span key={idx}>{part}</span>;
+      }
+
+      const intensity = Math.max(0, Math.min(1, tokenInfo.impact_abs ?? 0));
+      const bg = `rgba(239, 68, 68, ${0.15 + 0.35 * intensity})`;
+
+      return (
+        <mark
+          key={idx}
+          className="why-highlight"
+          style={{ backgroundColor: bg }}
+          title={`Impact: ${Number(tokenInfo.impact).toFixed(4)}`}
+        >
+          {part}
+        </mark>
+      );
+    });
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
@@ -197,6 +241,72 @@ export default function Home() {
               {result.model_real_pct}% · Fake {result.model_fake_pct}%
             </p>
 
+            {result.explainability &&
+              result.explainability.tokens &&
+              result.explainability.tokens.length > 0 && (
+                <>
+                  <div className="insights-header">
+                    <h2>🧠 Why the AI is Suspicious</h2>
+                    <p>
+                      Highlighted words below contributed the most to the AI's
+                      fake-risk score.
+                    </p>
+                  </div>
+
+                  <div className="why-box">
+                    <div className="why-text">
+                      {renderHighlightedText(description, result.explainability)}
+                    </div>
+                    <div className="why-top">
+                      <strong>Top signals:</strong>{" "}
+                      {result.explainability.tokens
+                        .slice(0, 8)
+                        .map((t) => t.token)
+                        .join(", ")}
+                    </div>
+                  </div>
+                </>
+              )}
+
+            {result.rag && (
+              <>
+                <div className="insights-header">
+                  <h2>🗃️ Memory Bank (RAG)</h2>
+                  <p>
+                    Similarity search against previously seen scam job postings.
+                  </p>
+                </div>
+
+                <div className="why-box">
+                  <p className="small-text">
+                    <strong>Max similarity:</strong>{" "}
+                    {Math.round((result.rag.max_similarity || 0) * 100)}%
+                  </p>
+
+                  {result.rag.matches && result.rag.matches.length > 0 ? (
+                    <div className="rag-list">
+                      {result.rag.matches.slice(0, 3).map((m, idx) => (
+                        <div key={idx} className="rag-item">
+                          <p className="small-text">
+                            <strong>
+                              {Math.round((m.similarity || 0) * 100)}%
+                            </strong>{" "}
+                            similar — {m.item?.title}
+                            {m.item?.location ? ` (${m.item.location})` : ""}
+                          </p>
+                          {m.item?.snippet && (
+                            <p className="small-text">{m.item.snippet}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="small-text">No similar scams found.</p>
+                  )}
+                </div>
+              </>
+            )}
+
             {/* Verification insights */}
             <div className="insights-header">
               <h2>🔍 Verification Insights</h2>
@@ -277,6 +387,51 @@ export default function Home() {
                   </p>
                 )}
               </div>
+
+              {/* Agentic verification card */}
+              {result.verification.agentic && (
+                <div className="info-card insight-card">
+                  <h4 data-icon="🧭">Agentic Verification</h4>
+                  <p className="small-text">
+                    <strong>Investigator:</strong>{" "}
+                    {result.verification.agentic.investigator?.official_domain
+                      ? `Found likely official domain: ${result.verification.agentic.investigator.official_domain}`
+                      : "Could not infer an official domain."}
+                  </p>
+
+                  {result.verification.agentic.auditor?.mismatches &&
+                  result.verification.agentic.auditor.mismatches.length > 0 ? (
+                    <p className="small-text">
+                      ❗ Email/domain mismatch: {" "}
+                      {result.verification.agentic.auditor.mismatches
+                        .slice(0, 2)
+                        .map((m) => `${m.email} vs ${m.expected_domain}`)
+                        .join(" · ")}
+                    </p>
+                  ) : (
+                    <p className="small-text">
+                      ✅ No email/domain mismatches detected from available data.
+                    </p>
+                  )}
+
+                  {result.verification.agentic.investigator?.top_results &&
+                    result.verification.agentic.investigator.top_results.length > 0 && (
+                      <p className="small-text">
+                        Evidence: {" "}
+                        <a
+                          href={
+                            result.verification.agentic.investigator.top_results[0].url
+                          }
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          {result.verification.agentic.investigator.top_results[0].title ||
+                            "Top result"} ↗
+                        </a>
+                      </p>
+                    )}
+                </div>
+              )}
             </div>
 
             {result.reasons && result.reasons.length > 0 && (

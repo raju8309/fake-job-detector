@@ -10,6 +10,9 @@ create/
 frontend/node_modules/
 frontend/.next/
 
+# MLflow
+backend/pipeline/mlruns/
+
 # OS / editor
 .DS_Store
 *.log

@@ -2,6 +2,8 @@ import os
 import re
 import asyncio
 from typing import List, Dict, Optional
+import html
+from urllib.parse import urlparse
 import httpx
 from rapidfuzz import fuzz
 
@@ -25,6 +27,28 @@ SUSPICIOUS_PHRASES = [
     "crypto", "whatsapp only", "telegram only", "20 minutes onboarding",
     "immediate joining no experience", "ssn", "pay to start",
 ]
+
+NON_OFFICIAL_HOSTS = {
+    "linkedin.com",
+    "www.linkedin.com",
+    "glassdoor.com",
+    "www.glassdoor.com",
+    "wikipedia.org",
+    "en.wikipedia.org",
+    "facebook.com",
+    "www.facebook.com",
+    "twitter.com",
+    "x.com",
+    "www.x.com",
+    "instagram.com",
+    "www.instagram.com",
+    "youtube.com",
+    "www.youtube.com",
+    "crunchbase.com",
+    "www.crunchbase.com",
+    "bloomberg.com",
+    "www.bloomberg.com",
+}
 
 # Helper Functions
 def normalize_text(text: str) -> str:
@@ -61,6 +85,148 @@ def extract_company_name(job_title: str, job_description: str, company_input: st
         return capitalized_word.group(1)
     
     return ""
+
+
+def _extract_hostname(url: str) -> str:
+    try:
+        host = urlparse(url).hostname or ""
+        return host.lower()
+    except Exception:
+        return ""
+
+
+def _registrable_domain(hostname: str) -> str:
+    """Best-effort registrable domain (no external deps)."""
+    if not hostname:
+        return ""
+    host = hostname.lower().strip(".")
+    if host.startswith("www."):
+        host = host[4:]
+    parts = [p for p in host.split(".") if p]
+    if len(parts) <= 2:
+        return host
+    return ".".join(parts[-2:])
+
+
+async def ddg_search_async(query: str, max_results: int = 5) -> List[Dict]:
+    """Lightweight web search using DuckDuckGo HTML (no API key)."""
+    if not query:
+        return []
+
+    url = "https://duckduckgo.com/html/"
+    params = {"q": query}
+    try:
+        async with httpx.AsyncClient(headers=HEADERS, follow_redirects=True) as client:
+            resp = await client.get(url, params=params, timeout=8.0)
+            resp.raise_for_status()
+            body = resp.text
+    except Exception:
+        return []
+
+    results: List[Dict] = []
+    anchor_re = re.compile(
+        r'<a[^>]+class="result__a"[^>]+href="(?P<href>[^"]+)"[^>]*>(?P<title>.*?)</a>',
+        re.IGNORECASE | re.DOTALL,
+    )
+    snippet_re = re.compile(
+        r'<a[^>]+class="result__snippet"[^>]*>(?P<snip>.*?)</a>',
+        re.IGNORECASE | re.DOTALL,
+    )
+
+    anchors = list(anchor_re.finditer(body))
+    snippets = list(snippet_re.finditer(body))
+
+    for i, a in enumerate(anchors[:max_results]):
+        href = html.unescape(a.group("href"))
+        title = html.unescape(re.sub(r"<.*?>", "", a.group("title"))).strip()
+        snip = ""
+        if i < len(snippets):
+            snip = html.unescape(re.sub(r"<.*?>", "", snippets[i].group("snip"))).strip()
+        results.append({"title": title, "url": href, "snippet": snip})
+
+    return results
+
+
+async def investigate_company_async(company_name: str) -> Dict:
+    """Investigator agent: verify company presence on the web and infer an official domain."""
+    company = (company_name or "").strip()
+    if not company:
+        return {
+            "queried_company": company,
+            "exists": False,
+            "official_domain": None,
+            "top_results": [],
+            "note": "missing company name",
+        }
+
+    query = f"{company} official website"
+    results = await ddg_search_async(query, max_results=6)
+
+    domains: List[str] = []
+    for r in results:
+        host = _extract_hostname(r.get("url", ""))
+        if not host:
+            continue
+        if host in NON_OFFICIAL_HOSTS:
+            continue
+        domains.append(_registrable_domain(host))
+
+    domain_counts: Dict[str, int] = {}
+    for d in domains:
+        if not d:
+            continue
+        domain_counts[d] = domain_counts.get(d, 0) + 1
+
+    official_domain = None
+    if domain_counts:
+        official_domain = sorted(domain_counts.items(), key=lambda x: x[1], reverse=True)[0][0]
+
+    return {
+        "queried_company": company,
+        "exists": len(results) > 0,
+        "official_domain": official_domain,
+        "top_results": results[:5],
+    }
+
+
+def audit_email_vs_domain(email_checks: List[Dict], official_domain: Optional[str]) -> Dict:
+    """Auditor agent: compare job-posting email domains with inferred official domain."""
+    expected = (official_domain or "")
+    mismatches = []
+    matches = []
+
+    for e in email_checks or []:
+        domain = (e.get("domain") or "").lower()
+        email = e.get("email")
+        if not domain:
+            continue
+
+        if expected:
+            email_reg = _registrable_domain(domain)
+            expected_reg = _registrable_domain(expected)
+            if email_reg == expected_reg or domain.endswith("." + expected_reg):
+                matches.append({"email": email, "domain": domain})
+            else:
+                mismatches.append(
+                    {
+                        "email": email,
+                        "domain": domain,
+                        "expected_domain": expected_reg,
+                    }
+                )
+
+    signals = []
+    if expected and mismatches:
+        signals.append("email_domain_mismatch_with_official")
+    if expected and not email_checks:
+        signals.append("no_email_found_to_audit")
+
+    return {
+        "official_domain": expected or None,
+        "signals": signals,
+        "matches": matches,
+        "mismatches": mismatches,
+    }
 
 # Async Adzuna API Search
 async def search_adzuna_jobs_async(
@@ -260,17 +426,24 @@ async def run_full_verification_async(
     """
     # Extract company name
     actual_company = extract_company_name(job_title, job_description, company_name)
-    
-    # Search Adzuna (async)
-    adzuna_results = await search_adzuna_jobs_async(
-        job_title,
-        company_name=actual_company,
-        location=job_location,
+
+    tasks = []
+    tasks.append(
+        search_adzuna_jobs_async(
+            job_title,
+            company_name=actual_company,
+            location=job_location,
+        )
     )
+    tasks.append(investigate_company_async(actual_company))
+
+    adzuna_results, investigator = await asyncio.gather(*tasks, return_exceptions=False)
     
     # Email analysis (synchronous, fast)
     emails = find_email_addresses(job_description)
     email_checks = [analyze_email_domain(email, company_name=actual_company) for email in emails]
+
+    auditor = audit_email_vs_domain(email_checks, investigator.get("official_domain"))
     
     # Keyword analysis (synchronous, fast)
     full_text = f"{job_title} {job_description}"
@@ -280,6 +453,10 @@ async def run_full_verification_async(
         "api": adzuna_results,
         "emails": email_checks,
         "kw_hits": suspicious_words,
+        "agentic": {
+            "investigator": investigator,
+            "auditor": auditor,
+        },
     }
 
 def run_full_verification(
