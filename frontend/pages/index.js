@@ -71,15 +71,15 @@ export default function Home() {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
       controller.abort();
-    }, 30000); // 30 second timeout
+    }, 60000); // 60 second timeout for Render cold starts
 
     try {
       setLoading(true);
       
-      // Show warming up message after 3 seconds
+      // Show warming up message after 2 seconds
       const warmupTimer = setTimeout(() => {
         setIsWarmingUp(true);
-      }, 3000);
+      }, 2000);
 
       // FIXED: Proper template literal syntax
       const res = await fetch(`${API_BASE}/analyze-job`, {
